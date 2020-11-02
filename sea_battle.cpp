@@ -4,13 +4,19 @@
 #include <vector>
 #include "TXLib.h"
 #define AREA_SIZE 10
+#define MAX_SHIP_SIZE 4
 using namespace std;
 
 const int windowWidth = 1000, windowHeight = 1000;
+const int gameAreaSize = 440;
 char fontMain[] = "Monaco";
 
 enum AreaMod {
     AREA_SHIP, AREA_MAIN
+};
+
+enum Keys {
+    KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN
 };
 
 struct Points {
@@ -20,10 +26,16 @@ struct Points {
     int y2;
 };
 
-struct AreaColor {
+struct AreaColors {
     COLORREF frame;
     COLORREF area;
     COLORREF line;
+};
+
+struct AreaSizes {
+    int segment;
+    int area;
+    int frame;
 };
 
 
@@ -33,11 +45,13 @@ private:
     vector<POINT> blunders;     // { x, y } - хранит индекс в segments квадрата промаха
                                 // индекс = AREA_SIZE * (y - 1) + x
     vector<Points> segments;    // { x1, y1, x2, y2 }  - хранит координаты на игровом столе
+    POINT pos;
     AreaMod areamod;            // переключалка между полем для кораблей и для выстрелов
-    int sizeSegment;            // размер сегмента
-    int x0, y0, size;           // точки отсчета (начальные точки расположения поля) и его размер
-    int sizeFrame;              // ширина рамки
-    AreaColor colors;           // цвет рамки / поля / линий (обводки)
+    // int sizeSegment;            // размер сегмента
+    //int x0, y0, size;           // точки отсчета (начальные точки расположения поля) и его размер
+    //int sizeFrame;              // ширина рамки
+    AreaColors colors;           // цвет рамки / поля / линий (обводки)
+    AreaSizes sizes;
 
     void _update_segments();
     void _draw_area();
@@ -54,36 +68,37 @@ public:
 
 class Ship {
 private:
-    vector<Points> coords;      // хранит координаты относительно окна
+    Points pos;                 // хранит координаты относительно окна
     int amountSegments;         // количество палуб
     int sizeSegment;            // размер сегмента
+    POINT size;                 // изменение конечных x, y для построения фигуры
+    AreaColors colors;
 
 public:
     void change_position(int, int);
+    void change_size(Keys);
+    void draw_ship();
 
-    Ship(int, int, int, int);
+    Ship(int, int, int, int, COLORREF, COLORREF);
 };
 
 
-void draw_rectangle(int, int, int, int, int, COLORREF, COLORREF);
+void draw_rectangle(Points, int, COLORREF, COLORREF);
 void print_text(int, int, char[], unsigned, char[], int, COLORREF);
-void draw_text(int, int, int, int, char[], unsigned, char[], int, COLORREF);
-void start_window(int, int, int, int, int, int, COLORREF, COLORREF, COLORREF);
+void draw_text(Points, char[], unsigned, char[], int, COLORREF);
+void start_window(Points, int, int, COLORREF, COLORREF, COLORREF);
 bool check_start_window(RECT);
-void key_pressed();
 void create_rectangle(int, int, int, int, COLORREF);
-void draw_line(int, int, int, int);
-void game();
-void clear_area(int, int, int, int);
+void draw_line(Points);
+void clear_area(Points);
+void draw_ship_window(Points, int, AreaColors, vector<Ship>&);
 
 
 
 GameArea::GameArea(int x1, int y1, int size, int sizeFrame, COLORREF colorFrame, COLORREF colorArea, COLORREF colorLine, AreaMod mod) {
-    sizeSegment = size / (AREA_SIZE + 1);
     areamod = mod;
-    this->sizeFrame = sizeFrame;
-    this->x0 = x1; this->y0 = y1;
-    this->size = size;
+    pos = { x1, y1 };
+    sizes = { size / (AREA_SIZE + 1), size, sizeFrame };
     colors = { colorFrame, colorArea, colorLine };
     
     _draw_area();
@@ -93,29 +108,28 @@ GameArea::GameArea(int x1, int y1, int size, int sizeFrame, COLORREF colorFrame,
 void GameArea::_update_segments() {
     for (int y = 0; y < AREA_SIZE; y++) {
         for (int x = 0; x < AREA_SIZE; x++) {
-            segments.push_back({ x * sizeSegment, y * sizeSegment, (x + 1) * sizeSegment, (y + 1) * sizeSegment });
+            segments.push_back({ x * sizes.segment, y * sizes.segment, (x + 1) * sizes.segment, (y + 1) * sizes.segment });
         }
     }
 }
 
 void GameArea::_draw_area() {
-    int halfSizeFrame = sizeFrame / 2;
-    int sizeLine = sizeFrame * 0.3;
+    int halfSizeFrame = sizes.frame / 2;
+    int sizeLine = sizes.frame * 0.3;
 
-    draw_rectangle(x0, y0, x0 + size, y0 + size, sizeFrame, colors.frame, colors.area);
+    draw_rectangle({ pos.x, pos.y, pos.x + sizes.area, pos.y + sizes.area }, sizes.frame, colors.frame, colors.area);
 
     txSetColor(colors.line, sizeLine);
-    for (int i = x0 + sizeSegment; i <= (AREA_SIZE + 1) * sizeSegment; i += sizeSegment) {
-        draw_line(i, y0 + halfSizeFrame, i, y0 + size - halfSizeFrame - sizeLine);
+    for (int i = pos.x + sizes.segment; i <= (AREA_SIZE + 1) * sizes.segment; i += sizes.segment) {
+        draw_line({ i, pos.y + halfSizeFrame, i, pos.y + sizes.area - halfSizeFrame - sizeLine });
     }
-    for (int i = y0 + sizeSegment; i <= (AREA_SIZE + 1) * sizeSegment; i += sizeSegment) {
-        draw_line(x0 + halfSizeFrame, i, x0 + size - halfSizeFrame - sizeLine, i);
+    for (int i = pos.y + sizes.segment; i <= (AREA_SIZE + 1) * sizes.segment; i += sizes.segment) {
+        draw_line({ pos.x + halfSizeFrame, i, pos.x + sizes.area - halfSizeFrame - sizeLine, i });
     }
 }
 
 void GameArea::change_position(int x, int y) {
-    x0 = x;
-    y0 = y;
+    pos = { x, y };
     _draw_area();
 }
 
@@ -133,14 +147,37 @@ void GameArea::update_blunders() {
 
 
 
-Ship::Ship(int segments, int x, int y, int size) {
+Ship::Ship(int segments, int x, int y, int size, COLORREF colorLine, COLORREF colorInside) {
     amountSegments = segments;
     sizeSegment = size;
-
-    for (int i = 0; i < segments; i++ ) {
+    this->size = { sizeSegment * amountSegments, sizeSegment };
+    pos = { x, y, x + this->size.x, y + this->size.y };
+    colors = { TX_TRANSPARENT, colorInside, colorLine };
+    /*for (int i = 0; i < segments; i++ ) {
         coords.push_back({ x + i * size, y, x + (i + 1) * size, y + size });
-    }
+    }*/
+}
 
+void Ship::change_position(int x, int y) {
+    pos = { x, y, x + size.x, y + size.y };
+}
+
+void Ship::change_size(Keys key) {
+    switch (key) {
+    case KEY_LEFT:
+    case KEY_RIGHT:
+        size = { sizeSegment * amountSegments, sizeSegment };
+        break;
+    case KEY_UP:
+    case KEY_DOWN:
+        size = { sizeSegment, sizeSegment * amountSegments };
+        break;
+    }
+    pos = { pos.x1, pos.y1, pos.x1 + size.x, pos.y1 + size.y };
+}
+
+void Ship::draw_ship() {
+    draw_rectangle(pos, 1, colors.frame, colors.area);
 }
 
 
@@ -156,10 +193,10 @@ int main()
     
     int halfStartButtonX = 50, halfStartButtonY = 30;
 
-    draw_rectangle(frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0, 1, TX_WHITE, TX_TRANSPARENT);
+    draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
 
     RECT rcStartWindow = { centerX - halfStartButtonX, centerY - halfStartButtonY, centerX + halfStartButtonX, centerY + halfStartButtonY };
-    start_window(rcStartWindow.left, rcStartWindow.top, rcStartWindow.right, rcStartWindow.bottom,
+    start_window({ rcStartWindow.left, rcStartWindow.top, rcStartWindow.right, rcStartWindow.bottom },
         5, 30, TX_WHITE, TX_LIGHTGRAY, TX_YELLOW);
 
     // Старт окно
@@ -173,8 +210,12 @@ int main()
     txClear();
 
     // Расстановка кораблей
-    draw_rectangle(frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0, 1, TX_WHITE, TX_TRANSPARENT);
-    GameArea gameAreaShip(30, 30, 440, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
+    int gameAreaX0 = 30, gameAreaY0 = 30;
+
+    draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
+    draw_ship_window();
+    
+    GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
 
     //int x1 = 30, y1 = 30;
     //create_rectangle(0, 0, 10, 10, TX_RED);
@@ -193,10 +234,10 @@ int main()
     return 0;
 }
 
-void draw_rectangle(int x1, int y1, int x2, int y2, int thickness, COLORREF colorFrame, COLORREF colorInside) {
+void draw_rectangle(Points points, int thickness, COLORREF colorFrame, COLORREF colorInside) {
     txSetColor(colorFrame, thickness);
     txSetFillColor(colorInside);
-    txRectangle(x1, y1, x2, y2);
+    txRectangle(points.x1, points.y1, points.x2, points.y2);
 }
 
 void print_text(int x, int y, char text[], unsigned align, char font[], int fontSize, COLORREF color) {
@@ -206,10 +247,10 @@ void print_text(int x, int y, char text[], unsigned align, char font[], int font
     txTextOut(x, y, text);
 }
 
-void draw_text(int x1, int y1, int x2, int y2, char text[], unsigned align, char font[], int fontSize, COLORREF color) {
+void draw_text(Points points, char text[], unsigned align, char font[], int fontSize, COLORREF color) {
     txSetColor(color);
     txSelectFont(font, fontSize);
-    txDrawText(x1, y1, x2, y2, text, align);
+    txDrawText(points.x1, points.y1, points.x2, points.y2, text, align);
 }
 
 void create_rectangle(int x1, int y1, int x2, int y2, COLORREF color) {
@@ -218,8 +259,8 @@ void create_rectangle(int x1, int y1, int x2, int y2, COLORREF color) {
     txRectangle(x1, y1, x2, y2);
 }
 
-void draw_line(int x1, int y1, int x2, int y2) {
-    txLine(x1, y1, x2, y2);
+void draw_line(Points points) {
+    txLine(points.x1, points.y1, points.x2, points.y2);
 }
 
 bool check_start_window(RECT rc) {
@@ -228,16 +269,25 @@ bool check_start_window(RECT rc) {
     return false;
 }
 
-void start_window(int x1, int y1, int x2, int y2, int thickness, int fontSize, COLORREF colorFrame, COLORREF colorInside, COLORREF colorText) {
+void start_window(Points points, int thickness, int fontSize, COLORREF colorFrame, COLORREF colorInside, COLORREF colorText) {
     //int centerX = (x2 + x1) / 2, centerY = (y2 + y1) / 2;
     char text[] = "НАЧАТЬ";
 
-    draw_rectangle(x1, y1, x2, y2, thickness, colorFrame, colorInside);
-    draw_text(x1, y1, x2, y2, text, DT_CENTER | TA_CENTER, fontMain, fontSize, colorText);
+    draw_rectangle(points, thickness, colorFrame, colorInside);
+    draw_text(points, text, DT_CENTER | TA_CENTER, fontMain, fontSize, colorText);
 }
 
-void clear_area(int x1, int y1, int x2, int y2) {
+void clear_area(Points points) {
     txSetColor(TX_BLACK);
     txSetFillColor(TX_BLACK);
-    txRectangle(x1, y1, x2, y2);
+    txRectangle(points.x1, points.y1, points.x2, points.y2);
+}
+
+void draw_ship_window(Points points, int thickness, AreaColors colors, vector<Ship>& ships) {
+    draw_rectangle(points, thickness, colors.frame, colors.area);
+    for (int i = 1; i <= MAX_SHIP_SIZE; i++) {
+        for (int j = MAX_SHIP_SIZE; j > 0; j--) {
+            ships.push_back(Ship(m  ))
+        }
+    }
 }
