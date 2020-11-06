@@ -91,7 +91,7 @@ bool check_start_window(RECT);
 void create_rectangle(int, int, int, int, COLORREF);
 void draw_line(Points);
 void clear_area(Points);
-void draw_ship_window(Points, int, AreaColors, vector<Ship>&);
+void draw_ship_window(Points, int, AreaColors, vector<Ship>&, AreaColors, int);
 
 
 
@@ -156,6 +156,8 @@ Ship::Ship(int segments, int x, int y, int size, COLORREF colorLine, COLORREF co
     /*for (int i = 0; i < segments; i++ ) {
         coords.push_back({ x + i * size, y, x + (i + 1) * size, y + size });
     }*/
+
+    draw_ship();
 }
 
 void Ship::change_position(int x, int y) {
@@ -211,9 +213,15 @@ int main()
 
     // Расстановка кораблей
     int gameAreaX0 = 30, gameAreaY0 = 30;
+    int shipWindowX0 = gameAreaX0 + gameAreaSize + 50, shipWindowY0 = gameAreaY0;
+    int sizeSegment = gameAreaSize / (AREA_SIZE + 1);
+    vector<Ship> ships;
 
     draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
-    draw_ship_window();
+    draw_ship_window(
+        { shipWindowX0, shipWindowY0, shipWindowX0 + sizeSegment * (MAX_SHIP_SIZE + 2), shipWindowY0 + sizeSegment * (MAX_SHIP_SIZE + 4) }, 
+        3, { TX_YELLOW, TX_RED, NULL }, ships, { NULL, TX_BROWN, TX_CYAN }, sizeSegment
+    );
     
     GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
 
@@ -283,11 +291,24 @@ void clear_area(Points points) {
     txRectangle(points.x1, points.y1, points.x2, points.y2);
 }
 
-void draw_ship_window(Points points, int thickness, AreaColors colors, vector<Ship>& ships) {
-    draw_rectangle(points, thickness, colors.frame, colors.area);
+void draw_ship_window(Points points, int thickness, AreaColors colorsRect, vector<Ship>& ships, AreaColors colorsShip, int size) {
+    draw_rectangle(points, thickness, colorsRect.frame, colorsRect.area);
+
+    //int size = (points.x2 - points.x1) / MAX_SHIP_SIZE;
+    int tempX, tempY = points.y1 + size;
+
     for (int i = 1; i <= MAX_SHIP_SIZE; i++) {
-        for (int j = MAX_SHIP_SIZE; j > 0; j--) {
-            ships.push_back(Ship(m  ))
+        tempX = points.x1 + size;
+        for (int j = MAX_SHIP_SIZE; j >= i; j--) {
+            if (tempX + size * i > points.x2) {
+                tempX = points.x1 + size;
+                tempY += size;
+            }
+            ships.push_back(Ship(i, tempX, tempY, size, colorsShip.line, colorsShip.area));
+            tempX += size * i;
         }
+        tempY += size;
     }
 }
+
+// сделать второй вектор у поля с меньшим квадратом для кораблей
