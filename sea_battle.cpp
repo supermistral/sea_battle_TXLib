@@ -61,6 +61,7 @@ public:
     void update_blunders();
     void change_position(int, int);
     Points get_segment(int);
+    int get_segment_size();
 
     GameArea(int, int, int, int, COLORREF, COLORREF, COLORREF, AreaMod);
 };
@@ -135,6 +136,10 @@ void GameArea::change_position(int x, int y) {
 
 Points GameArea::get_segment(int index) {
     return segments[index];
+}
+
+int GameArea::get_segment_size() {
+    return sizes.segment;
 }
 
 void GameArea::update_hits() {
@@ -214,16 +219,16 @@ int main()
     // Расстановка кораблей
     int gameAreaX0 = 30, gameAreaY0 = 30;
     int shipWindowX0 = gameAreaX0 + gameAreaSize + 50, shipWindowY0 = gameAreaY0;
-    int sizeSegment = gameAreaSize / (AREA_SIZE + 1);
     vector<Ship> ships;
+
+    GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
+    int sizeSegment = gameAreaShip.get_segment_size();
 
     draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
     draw_ship_window(
         { shipWindowX0, shipWindowY0, shipWindowX0 + sizeSegment * (MAX_SHIP_SIZE + 2), shipWindowY0 + sizeSegment * (MAX_SHIP_SIZE + 4) }, 
         3, { TX_YELLOW, TX_RED, NULL }, ships, { NULL, TX_BROWN, TX_CYAN }, sizeSegment
     );
-    
-    GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
 
     //int x1 = 30, y1 = 30;
     //create_rectangle(0, 0, 10, 10, TX_RED);
