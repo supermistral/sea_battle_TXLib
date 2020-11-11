@@ -39,6 +39,24 @@ struct AreaSizes {
 };
 
 
+class Button {
+private:
+    Points pos;
+    AreaColors colors;
+    char* text = new char;
+    int fontSize;
+    int thickness;
+    unsigned align;
+
+public:
+    void draw();
+    RECT get_rect();
+    bool check_mouse();
+
+    Button(Points, char[], int, int, AreaColors, unsigned);
+};
+
+
 class GameArea {
 private:
     vector<POINT> hits;         // { x, y } - хранит индекс в segments квадрата попадания
@@ -60,10 +78,12 @@ public:
     void update_hits();
     void update_blunders();
     void change_position(int, int);
-    Points get_segment(int);
+    POINT get_segment(int);
     int get_segment_size();
+    int get_space_frame();
+    void draw();
 
-    GameArea(int, int, int, int, COLORREF, COLORREF, COLORREF, AreaMod);
+    GameArea(int, int, int, int, AreaColors, AreaMod);
 };
 
 
@@ -74,33 +94,38 @@ private:
     int sizeSegment;            // размер сегмента
     POINT size;                 // изменение конечных x, y для построения фигуры
     AreaColors colors;
+    int spaceFrame;
+    bool onArea = false;
 
 public:
-    void change_position(int, int);
+    void change_position(POINT);
     void change_size(Keys);
-    void draw_ship();
+    void draw();
+    bool check_mouse();
+    Points get_real_size();
 
-    Ship(int, int, int, int, COLORREF, COLORREF);
+    Ship(int, int, int, int, int, COLORREF, COLORREF);
 };
+
 
 
 void draw_rectangle(Points, int, COLORREF, COLORREF);
 void print_text(int, int, char[], unsigned, char[], int, COLORREF);
 void draw_text(Points, char[], unsigned, char[], int, COLORREF);
 void start_window(Points, int, int, COLORREF, COLORREF, COLORREF);
-bool check_start_window(RECT);
-void create_rectangle(int, int, int, int, COLORREF);
+bool check_press_button(RECT);
+//void create_rectangle(int, int, int, int, COLORREF);
 void draw_line(Points);
 void clear_area(Points);
-void draw_ship_window(Points, int, AreaColors, vector<Ship>&, AreaColors, int);
+void draw_ship_window(Points, int, AreaColors, vector<Ship>&, AreaColors, int, int);
 
 
 
-GameArea::GameArea(int x1, int y1, int size, int sizeFrame, COLORREF colorFrame, COLORREF colorArea, COLORREF colorLine, AreaMod mod) {
+GameArea::GameArea(int x1, int y1, int size, int sizeFrame, AreaColors colors, AreaMod mod) {
     areamod = mod;
     pos = { x1, y1 };
     sizes = { size / (AREA_SIZE + 1), size, sizeFrame };
-    colors = { colorFrame, colorArea, colorLine };
+    this->colors = colors;
     
     _draw_area();
     _update_segments();
@@ -134,12 +159,16 @@ void GameArea::change_position(int x, int y) {
     _draw_area();
 }
 
-Points GameArea::get_segment(int index) {
-    return segments[index];
+POINT GameArea::get_segment(int index) {
+    return { segments[index].x1, segments[index].y1 };
 }
 
 int GameArea::get_segment_size() {
     return sizes.segment;
+}
+
+int GameArea::get_space_frame() {
+    return sizes.frame * 0.3 * 3;
 }
 
 void GameArea::update_hits() {
@@ -150,23 +179,28 @@ void GameArea::update_blunders() {
 
 }
 
+void GameArea::draw() {
+    _draw_area();
+}
 
 
-Ship::Ship(int segments, int x, int y, int size, COLORREF colorLine, COLORREF colorInside) {
+
+Ship::Ship(int segments, int x, int y, int size, int spaceFrame, COLORREF colorLine, COLORREF colorInside) {
     amountSegments = segments;
     sizeSegment = size;
     this->size = { sizeSegment * amountSegments, sizeSegment };
+    this->spaceFrame = spaceFrame;
     pos = { x, y, x + this->size.x, y + this->size.y };
     colors = { TX_TRANSPARENT, colorInside, colorLine };
     /*for (int i = 0; i < segments; i++ ) {
         coords.push_back({ x + i * size, y, x + (i + 1) * size, y + size });
     }*/
 
-    draw_ship();
+    draw();
 }
 
-void Ship::change_position(int x, int y) {
-    pos = { x, y, x + size.x, y + size.y };
+void Ship::change_position(POINT points) {
+    pos = { points.x, points.y, points.x + size.x, points.y + size.y };
 }
 
 void Ship::change_size(Keys key) {
@@ -183,8 +217,48 @@ void Ship::change_size(Keys key) {
     pos = { pos.x1, pos.y1, pos.x1 + size.x, pos.y1 + size.y };
 }
 
-void Ship::draw_ship() {
-    draw_rectangle(pos, 1, colors.frame, colors.area);
+Points Ship::get_real_size() {
+    return { pos.x1 + spaceFrame, pos.y1 + spaceFrame, pos.x2 - spaceFrame, pos.y2 - spaceFrame };
+}
+
+void Ship::draw() {
+    draw_rectangle(get_real_size(), 1, colors.frame, colors.area);
+}
+
+bool Ship::check_mouse() {
+    Points realSize = get_real_size();
+    RECT rc = { realSize.x1, realSize.y1, realSize.x2, realSize.y2 };
+    if (In(txMousePos(), rc))
+        return true;
+    return false;
+}
+
+
+
+Button::Button(Points points, char* text, int fontSize, int thickness, 
+    AreaColors colors = {TX_WHITE, TX_YELLOW, TX_RED}, unsigned align = DT_CENTER | TA_CENTER) {
+    pos = points;
+    this->text = text;
+    this->fontSize = fontSize;
+    this->colors = colors;
+    this->thickness = thickness;
+    this->align = align;
+}
+
+void Button::draw() {
+    draw_rectangle(pos, thickness, colors.frame, colors.area);
+    draw_text(pos, text, align, fontMain, fontSize, colors.line);
+}
+
+RECT Button::get_rect() {
+    return { pos.x1, pos.y1, pos.x2, pos.y2 };
+}
+
+bool Button::check_mouse() {
+    RECT rc = { pos.x1, pos.y1, pos.x2, pos.y2 };
+    if (In(txMousePos(), rc))
+        return true;
+    return false;
 }
 
 
@@ -202,33 +276,78 @@ int main()
 
     draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
 
-    RECT rcStartWindow = { centerX - halfStartButtonX, centerY - halfStartButtonY, centerX + halfStartButtonX, centerY + halfStartButtonY };
-    start_window({ rcStartWindow.left, rcStartWindow.top, rcStartWindow.right, rcStartWindow.bottom },
-        5, 30, TX_WHITE, TX_LIGHTGRAY, TX_YELLOW);
+    char startText[] = "НАЧАТЬ";
+    Points pointsStartWindow = { centerX - halfStartButtonX, centerY - halfStartButtonY,
+        centerX + halfStartButtonX, centerY + halfStartButtonY };
+    Button startButton(pointsStartWindow, startText, 30, 5, { TX_WHITE, TX_LIGHTGRAY, TX_YELLOW });
+    startButton.draw();
 
     // Старт окно
     bool running = false;
     while (!running) {
         while (txMouseButtons() != 1) {}
-        running = check_start_window(rcStartWindow);
+        running = startButton.check_mouse();
     }
 
     txSetFillColor(TX_BLACK);
     txClear();
 
-    // Расстановка кораблей
+    // Расстановка кораблей на своем поле
     int gameAreaX0 = 30, gameAreaY0 = 30;
     int shipWindowX0 = gameAreaX0 + gameAreaSize + 50, shipWindowY0 = gameAreaY0;
     vector<Ship> ships;
 
-    GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, TX_WHITE, TX_BLUE, TX_GRAY, AREA_SHIP);
+    GameArea gameAreaShip(gameAreaX0, gameAreaY0, gameAreaSize, 8, { TX_WHITE, TX_BLUE, TX_GRAY }, AREA_SHIP);
     int sizeSegment = gameAreaShip.get_segment_size();
+    int spaceFrameShip = gameAreaShip.get_space_frame();
+    Points pointsShipWindow = { shipWindowX0, shipWindowY0, shipWindowX0 + sizeSegment * (MAX_SHIP_SIZE + 2), 
+        shipWindowY0 + sizeSegment * (MAX_SHIP_SIZE + 4) };
 
     draw_rectangle({ frame_x0, frame_x0, windowWidth - frame_x0, windowHeight - frame_x0 }, 1, TX_WHITE, TX_TRANSPARENT);
-    draw_ship_window(
-        { shipWindowX0, shipWindowY0, shipWindowX0 + sizeSegment * (MAX_SHIP_SIZE + 2), shipWindowY0 + sizeSegment * (MAX_SHIP_SIZE + 4) }, 
-        3, { TX_YELLOW, TX_RED, NULL }, ships, { NULL, TX_BROWN, TX_CYAN }, sizeSegment
-    );
+    draw_ship_window(pointsShipWindow, 3, { TX_YELLOW, TX_RED, NULL }, ships, { NULL, TX_BROWN, NULL }, sizeSegment, spaceFrameShip);
+
+    char shipText[] = "ЗАПУСТИТЬ";
+    int sizeShipButtonX = 150, sizeShipButtonY = 80;
+    Points pointsShipButton = { pointsShipWindow.x1, pointsShipWindow.y2 + 100, 
+        pointsShipWindow.x1 + sizeShipButtonX, pointsShipWindow.y2 + 100 + sizeShipButtonY };
+    Button shipButton(pointsShipButton, shipText, 30, 5);
+    shipButton.draw();
+
+    // Расстановка кораблей на игровом поле
+    int currentShipIndex = -1;
+    running = false;
+    while (!running) {
+        while (txMouseButtons() != 1) {
+            // Если сейчас выбран корабль, он двигается по полю согласно курсору
+            if (currentShipIndex >= 0) {
+                // До следующего клика по полю - по нему корабль устанавливается на поле
+                while (txMouseButtons() != 1) {
+                    POINT mousePos = txMousePos();
+                    mousePos = { (mousePos.x - gameAreaX0) % sizeSegment + 1, (mousePos.y - gameAreaY0) % sizeSegment + 1 };
+                    if (mousePos.x < 0 || mousePos.x >= AREA_SIZE || mousePos.y < 0 || mousePos.y >= AREA_SIZE)
+                        continue;
+                    POINT newShipPos = gameAreaShip.get_segment(AREA_SIZE * (mousePos.y - 1) + mousePos.x);
+                    ships[currentShipIndex].change_position(newShipPos);
+                }
+            }
+        }
+        running = shipButton.check_mouse();
+        if (running)
+            break;
+
+        if (currentShipIndex >= 0) {
+
+        }
+        else {
+            // Чек на клик мышки по кораблю
+            for (size_t i = 0; i < ships.size(); i++) {
+                if (ships[i].check_mouse()) {
+                    currentShipIndex = i;
+                    break;
+                }
+            }
+        }
+    }
 
     //int x1 = 30, y1 = 30;
     //create_rectangle(0, 0, 10, 10, TX_RED);
@@ -266,17 +385,11 @@ void draw_text(Points points, char text[], unsigned align, char font[], int font
     txDrawText(points.x1, points.y1, points.x2, points.y2, text, align);
 }
 
-void create_rectangle(int x1, int y1, int x2, int y2, COLORREF color) {
-    txSetColor(color);
-    txSetFillColor(color);
-    txRectangle(x1, y1, x2, y2);
-}
-
 void draw_line(Points points) {
     txLine(points.x1, points.y1, points.x2, points.y2);
 }
 
-bool check_start_window(RECT rc) {
+bool check_press_button(RECT rc) {
     if (In(txMousePos(), rc))
         return true;
     return false;
@@ -296,7 +409,7 @@ void clear_area(Points points) {
     txRectangle(points.x1, points.y1, points.x2, points.y2);
 }
 
-void draw_ship_window(Points points, int thickness, AreaColors colorsRect, vector<Ship>& ships, AreaColors colorsShip, int size) {
+void draw_ship_window(Points points, int thickness, AreaColors colorsRect, vector<Ship>& ships, AreaColors colorsShip, int size, int spaceFrame) {
     draw_rectangle(points, thickness, colorsRect.frame, colorsRect.area);
 
     //int size = (points.x2 - points.x1) / MAX_SHIP_SIZE;
@@ -309,7 +422,7 @@ void draw_ship_window(Points points, int thickness, AreaColors colorsRect, vecto
                 tempX = points.x1 + size;
                 tempY += size;
             }
-            ships.push_back(Ship(i, tempX, tempY, size, colorsShip.line, colorsShip.area));
+            ships.push_back(Ship(i, tempX, tempY, size, spaceFrame, colorsShip.line, colorsShip.area));
             tempX += size * i;
         }
         tempY += size;
