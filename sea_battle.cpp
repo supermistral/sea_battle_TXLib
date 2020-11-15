@@ -333,10 +333,10 @@ int main()
     running = true;
     //POINT gameAreaShipSize = gameAreaShip.get_end_position();
     while (1) {
-        while (txMouseButtons() != 1 || running) {
-            //cout << currentShipIndex;
+        while (txMouseButtons() != 1) {
+            running = true;
             // Если сейчас выбран корабль, он двигается по полю согласно курсору
-            if (currentShipIndex >= 0) {
+            if (currentShipIndex >= 0 && running) {
                 POINT currentShipSize = ships[currentShipIndex].get_size();
                 // До следующего клика по полю - по нему корабль устанавливается на поле
                 txBegin();
@@ -369,23 +369,24 @@ int main()
                     txSleep();
                 }
                 txEnd();
-                if (ships[currentShipIndex].check_mouse()) {
-                    currentShipIndex = -1;
-                    running = false;
+                currentShipIndex = -1;
+                running = false;
+                break;
+            }
+        }
+        if (running) {
+            if (shipButton.check_mouse())
+                break;
+            // Чек на клик мышки по кораблю
+            for (size_t i = 0; i < ships.size(); i++) {
+                if (ships[i].check_mouse()) {
+                    currentShipIndex = i;
                     break;
                 }
             }
         }
-        if (shipButton.check_mouse())
-            break;
-            // Чек на клик мышки по кораблю
-        for (size_t i = 0; i < ships.size(); i++) {
-            if (ships[i].check_mouse()) {
-                currentShipIndex = i;
-                //clear_area(ships[currentShipIndex].get_real_size(), TX_RED);
-                break;
-            }
-        }
+        //running = true;
+        //txSleep();
     }
     //int x1 = 30, y1 = 30;
     //create_rectangle(0, 0, 10, 10, TX_RED);
